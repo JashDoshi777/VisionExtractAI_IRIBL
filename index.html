@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionExtractAI | AI Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0D0C14;
+            --surface-color: rgba(23, 22, 32, 0.5);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-primary: #f0f0f5;
+            --text-secondary: #a1a1aa;
+            --accent-color: #9333ea;
+            --accent-hover: #a855f7;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-primary); overflow: hidden; }
+        #hexagon-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .main-container { position: relative; z-index: 2; height: 100vh; overflow-y: auto; overflow-x: hidden; }
+        .page { display: none; }
+        .page.active { display: block; animation: fadeIn 0.7s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .glass-card { background-color: var(--surface-color); border: 1px solid var(--border-color); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); transition: all 0.3s ease; }
+        .glass-card:hover:not(.no-hover) { border-color: var(--accent-color); background-color: rgba(23, 22, 32, 0.7); }
+        .chat-bubble, .contact-card, .brochure-row { animation: popIn 0.5s ease-out forwards; opacity: 0; transform: scale(0.95); }
+        @keyframes popIn { to { opacity: 1; transform: scale(1); } }
+        .contact-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .contact-card:hover { transform: translateY(-6px); box-shadow: 0 0 30px rgba(147, 51, 234, 0.25); }
+        .editable-field:hover { background-color: rgba(255, 255, 255, 0.1); cursor: pointer; border-radius: 4px; }
+        #chat-widget { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        #chat-widget:hover { transform: scale(1.1); box-shadow: 0 0 20px var(--accent-color); }
+        #chat-panel { transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+        .modal-container { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease, opacity 0.3s ease; transform: scale(0.95); }
+        .modal-container.active .modal-content { transform: scale(1); }
+    </style>
+</head>
+<body class="antialiased">
+
+    <canvas id="hexagon-canvas"></canvas>
+
+    <div class="main-container p-6 sm:p-8 lg:p-12">
+
+        <header class="mb-10 flex justify-between items-center">
+            <div>
+                <h1 class="text-4xl font-bold text-white tracking-tighter">VisionExtractAI</h1>
+                <p id="header-subtitle" class="text-md text-gray-400 mt-1">AI-Powered Document Extraction</p>
+            </div>
+            <button id="back-btn" class="hidden text-gray-400 hover:text-white transition-colors text-lg">
+                <i class="fas fa-arrow-left mr-2"></i> Back
+            </button>
+        </header>
+
+        <div id="page-api-key" class="page active">
+            <div class="max-w-2xl mx-auto mt-10 text-center">
+                <h2 class="text-5xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">Welcome to VisionExtractAI</h2>
+                <p class="text-lg text-gray-400 mt-4 max-w-xl mx-auto">
+                    Transform static documents into a dynamic, queryable knowledge base. This app uses <strong>Google's Gemini API</strong> to perform state-of-the-art OCR and to power an intelligent chat assistant that understands your content.
+                </p>
+                <div class="mt-8 glass-card p-8 rounded-xl">
+                    <p class="text-gray-300 mb-4">To begin, please enter your 16-Digit API key below.</p>
+                    <input type="password" id="api-key-input" placeholder="Enter your 16-Digit API Key here" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-center focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <button id="continue-with-api-key-btn" class="w-full mt-6 font-bold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center gap-2 justify-center bg-purple-600 hover:bg-purple-700 text-white">
+                        Unlock Command Center
+                    </button>
+                    <p id="api-key-error" class="text-red-400 text-sm mt-2 hidden"></p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="page-select-mode" class="page">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+                <div id="select-cards-btn" class="glass-card p-8 rounded-xl cursor-pointer">
+                    <i class="fas fa-id-card text-4xl text-blue-400 mb-4"></i>
+                    <h2 class="text-2xl font-bold mb-2">Business Card Extractor</h2>
+                    <p class="text-gray-400">Extract structured contact information from images of business cards.</p>
+                </div>
+                <div id="select-brochures-btn" class="glass-card p-8 rounded-xl cursor-pointer">
+                    <i class="fas fa-book-open text-4xl text-purple-400 mb-4"></i>
+                    <h2 class="text-2xl font-bold mb-2">Brochure Extractor</h2>
+                    <p class="text-gray-400">Extract multiple contacts and general information from PDF brochures.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-dashboard-cards" class="page">
+             <div id="upload-section-cards" class="mb-8">
+                <input type="file" id="file-upload-cards" class="hidden" multiple accept="image/*">
+                <label for="file-upload-cards" class="drop-zone glass-card flex flex-col items-center justify-center w-full h-48 p-6 rounded-xl cursor-pointer border-dashed border-2">
+                    <div class="text-center">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-3"></i>
+                        <p class="font-semibold">Drag & drop Business Cards or <span class="text-purple-400">browse</span></p>
+                        <p class="text-sm text-gray-500 mt-1">Supports PNG, JPG, or WEBP</p>
+                    </div>
+                </label>
+            </div>
+            <div id="live-activity-section-cards" class="mb-8">
+                <h3 class="font-bold text-lg mb-2 flex items-center gap-2 text-gray-400"><i class="fas fa-history"></i> Live Activity</h3>
+                <div class="live-activity-feed space-y-2 text-sm"></div>
+            </div>
+            <div id="results-section-cards" class="results-section rounded-xl">
+                <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                    <h3 class="font-bold text-lg">Extracted Contacts</h3>
+                    <div class="flex items-center gap-4">
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3"><i class="fas fa-search text-gray-500"></i></span>
+                            <input type="text" class="search-input glass-card no-hover w-full max-w-xs bg-transparent border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Search contacts...">
+                        </div>
+                        <div class="relative actions-menu-container">
+                            <button class="actions-menu-btn glass-card font-bold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center gap-2 justify-center">
+                                Actions <i class="fas fa-chevron-down text-xs ml-1"></i>
+                            </button>
+                            <div class="actions-dropdown hidden absolute right-0 mt-2 w-48 glass-card rounded-lg shadow-lg z-10">
+                                <a href="#" class="export-pdf-btn block px-4 py-2 text-sm hover:bg-purple-600 rounded-t-lg">Export to PDF</a>
+                                <a href="#" class="export-excel-btn block px-4 py-2 text-sm hover:bg-purple-600 rounded-b-lg">Export to Excel</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-grid-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+                <div class="placeholder-row text-center py-24 text-gray-500">
+                   <i class="fas fa-id-card text-5xl mb-4"></i>
+                   <p class="text-lg">Your extracted contacts will appear here as cards.</p>
+               </div>
+            </div>
+        </div>
+        
+        <div id="page-dashboard-brochures" class="page">
+            <div id="upload-section-brochures" class="mb-8">
+                <input type="file" id="file-upload-brochures" class="hidden" multiple accept=".pdf">
+                <label for="file-upload-brochures" class="drop-zone glass-card flex flex-col items-center justify-center w-full h-48 p-6 rounded-xl cursor-pointer border-dashed border-2">
+                    <div class="text-center">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-3"></i>
+                        <p class="font-semibold">Drag & drop PDF Brochures or <span class="text-purple-400">browse</span></p>
+                        <p class="text-sm text-gray-500 mt-1">Supports PDF files</p>
+                    </div>
+                </label>
+            </div>
+             <div id="live-activity-section-brochures" class="mb-8">
+                <h3 class="font-bold text-lg mb-2 flex items-center gap-2 text-gray-400"><i class="fas fa-history"></i> Live Activity</h3>
+                <div class="live-activity-feed space-y-2 text-sm"></div>
+            </div>
+            <div id="results-section-brochures" class="results-section rounded-xl">
+                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                    <h3 class="font-bold text-lg">Extracted Brochures</h3>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3"><i class="fas fa-search text-gray-500"></i></span>
+                        <input type="text" class="search-input glass-card no-hover w-full max-w-xs bg-transparent border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Search brochures...">
+                    </div>
+                 </div>
+                <div class="brochure-list-container space-y-3"></div>
+                <div class="placeholder-row text-center py-24 text-gray-500">
+                   <i class="fas fa-book-open text-5xl mb-4"></i>
+                   <p class="text-lg">Information extracted from your brochures will appear here.</p>
+               </div>
+            </div>
+        </div>
+
+    </div>
+
+    <button id="chat-widget" class="hidden fixed bottom-8 right-8 bg-purple-600 hover:bg-purple-700 text-white w-16 h-16 rounded-full flex items-center justify-center shadow-lg z-40">
+        <i class="fas fa-comments text-2xl"></i>
+    </button>
+
+    <div id="chat-panel" class="fixed bottom-0 right-0 h-full w-full max-w-md glass-card no-hover flex flex-col z-50 transform translate-x-full">
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h3 class="font-bold text-lg flex items-center gap-3"><i class="fas fa-comments text-purple-400"></i> Ask About Your Documents</h3>
+            <button id="chat-close-btn" class="text-gray-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div id="chat-messages" class="flex-1 p-4 space-y-4 overflow-y-auto">
+            <div class="flex justify-start">
+                <div class="chat-bubble bg-gray-700 rounded-lg p-3"><p class="text-sm">Hello! Ask me anything about your documents.</p></div>
+            </div>
+        </div>
+        <div class="p-4 border-t border-gray-700">
+            <div class="relative">
+                <input type="text" id="chat-input" placeholder="Type your question..." class="w-full bg-gray-900 border border-gray-700 rounded-full pl-4 pr-12 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <button id="chat-send-btn" class="absolute inset-y-0 right-0 flex items-center justify-center bg-purple-600 hover:bg-purple-700 w-10 h-10 rounded-full m-1.5 transition-colors"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="contacts-modal" class="modal-container hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4" style="opacity: 0;">
+        <div class="modal-content glass-card w-full max-w-4xl rounded-xl max-h-[80vh] flex flex-col" style="opacity: 0;">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <h3 id="contacts-modal-title" class="font-bold text-lg">Contacts</h3>
+                <div class="flex items-center gap-4">
+                    <button id="export-contacts-pdf-btn" class="text-sm text-gray-300 hover:text-white"><i class="fas fa-file-pdf mr-1"></i> Export PDF</button>
+                    <button id="export-contacts-excel-btn" class="text-sm text-gray-300 hover:text-white"><i class="fas fa-file-excel mr-1"></i> Export Excel</button>
+                    <button onclick="toggleModal('contacts-modal', false)" class="text-gray-400 hover:text-white ml-4"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+            <div class="p-4 overflow-y-auto">
+                <div id="contacts-modal-body" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-modal" class="modal-container hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4" style="opacity: 0;">
+        <div class="modal-content glass-card w-full max-w-4xl rounded-xl max-h-[80vh] flex flex-col" style="opacity: 0;">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <h3 id="info-modal-title" class="font-bold text-lg">Brochure Information</h3>
+                <div class="flex items-center gap-4">
+                    <button id="export-info-pdf-btn" class="text-sm text-gray-300 hover:text-white"><i class="fas fa-file-pdf mr-1"></i> Export PDF</button>
+                    <button onclick="toggleModal('info-modal', false)" class="text-gray-400 hover:text-white ml-4"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+            <div id="info-modal-body" class="p-4 overflow-y-auto text-gray-300 whitespace-pre-wrap"></div>
+        </div>
+    </div>
+
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+        let userApiKey = null;
+        let currentMode = null;
+        let contactData = { cards: [], brochures: [] };
+        let chatHistory = [];
+
+        const pages = document.querySelectorAll('.page');
+        const headerSubtitle = document.getElementById('header-subtitle');
+        const backBtn = document.getElementById('back-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const chatSendBtn = document.getElementById('chat-send-btn');
+        const chatWidget = document.getElementById('chat-widget');
+        const chatPanel = document.getElementById('chat-panel');
+        const chatCloseBtn = document.getElementById('chat-close-btn');
+        const canvas = document.getElementById('hexagon-canvas');
+        const ctx = canvas.getContext('2d');
+        let hexagons = [];
+        const hexSize = 25;
+        const hexWidth = Math.sqrt(3) * hexSize;
+        const hexHeight = 2 * hexSize;
+        let mouse = { x: undefined, y: undefined, radius: 150 };
+
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            hexagons = [];
+            const cols = Math.ceil(canvas.width / hexWidth) + 1;
+            const rows = Math.ceil(canvas.height / (hexHeight * 0.75)) + 1;
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const x = col * hexWidth + (row % 2) * (hexWidth / 2);
+                    const y = row * hexHeight * 0.75;
+                    hexagons.push({ x, y, size: hexSize, opacity: 0.05 });
+                }
+            }
+        }
+
+        function drawHexagon(x, y, size, opacity) {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i + (Math.PI / 6);
+                const pointX = x + size * Math.cos(angle);
+                const pointY = y + size * Math.sin(angle);
+                if (i === 0) ctx.moveTo(pointX, pointY);
+                else ctx.lineTo(pointX, pointY);
+            }
+            ctx.closePath();
+            ctx.fillStyle = `rgba(147, 51, 234, ${opacity})`;
+            ctx.strokeStyle = `rgba(147, 51, 234, ${opacity * 1.5})`;
+            ctx.lineWidth = 1;
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hexagons.forEach(hex => {
+                const dist = Math.hypot(hex.x - mouse.x, hex.y - mouse.y);
+                const maxOpacity = 0.6;
+                const baseOpacity = 0.05;
+                let targetOpacity = baseOpacity;
+                if (dist < mouse.radius) {
+                    targetOpacity = Math.max(baseOpacity, (1 - dist / mouse.radius) * maxOpacity);
+                }
+                hex.opacity += (targetOpacity - hex.opacity) * 0.1;
+                drawHexagon(hex.x, hex.y, hex.size, hex.opacity);
+            });
+            requestAnimationFrame(animate);
+        }
+        
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('resize', initCanvas);
+        
+        function toggleChatPanel(show) {
+            chatPanel.style.transform = show ? 'translateX(0)' : 'translateX(100%)';
+            chatWidget.style.transform = show ? 'scale(0)' : 'scale(1)';
+        }
+
+        chatWidget.addEventListener('click', () => toggleChatPanel(true));
+        chatCloseBtn.addEventListener('click', () => toggleChatPanel(false));
+        
+        function renderUI(mode) {
+            const dataToRender = contactData[mode];
+            if (mode === 'cards') {
+                renderCards(dataToRender);
+            } else if (mode === 'brochures') {
+                renderBrochures(dataToRender);
+            }
+        }
+
+        function renderCards(dataToRender) {
+            const container = document.querySelector('#page-dashboard-cards .card-grid-container');
+            const placeholder = document.querySelector('#page-dashboard-cards .placeholder-row');
+            const searchInput = document.querySelector('#page-dashboard-cards .search-input');
+            
+            container.innerHTML = ''; 
+            if (!dataToRender || dataToRender.length === 0) {
+                placeholder.classList.remove('hidden');
+                placeholder.querySelector('p').textContent = searchInput.value ? 'No cards match your search.' : 'Your extracted business cards will appear here.';
+            } else {
+                placeholder.classList.add('hidden');
+                dataToRender.forEach((data, index) => addCardToGrid(data, index));
+            }
+        }
+        
+        function addCardToGrid(data, index) {
+            const container = document.querySelector('#page-dashboard-cards .card-grid-container');
+            const card = document.createElement('div');
+            card.id = `card-${data.id}`;
+            card.className = 'contact-card glass-card p-4 rounded-xl flex flex-col justify-between h-full';
+            card.style.animationDelay = `${index * 50}ms`;
+            card.innerHTML = `
+                <div class="flex-grow space-y-1">
+                    <p class="font-bold text-lg truncate editable-field" data-field="Company Name">${data['Company Name'] || 'Unknown Company'}</p>
+                    <p class="text-sm text-gray-400 editable-field" data-field="Owner Name">${data['Owner Name'] || 'No Name'}</p>
+                    <div class="mt-3 text-xs space-y-2 text-gray-400">
+                        <p class="truncate editable-field" data-field="Email"><i class="fas fa-envelope fa-fw mr-2"></i>${data['Email'] || 'N/A'}</p>
+                        <p class="truncate editable-field" data-field="Number"><i class="fas fa-phone fa-fw mr-2"></i>${data['Number'] || 'N/A'}</p>
+                        <p class="truncate editable-field" data-field="Address"><i class="fas fa-map-marker-alt fa-fw mr-2"></i>${data['Address'] || 'N/A'}</p>
+                    </div>
+                </div>
+                <div class="flex justify-end items-center gap-2 mt-4 pt-3 border-t border-gray-700/50">
+                    <a href="/uploads/${data.image_filename}" target="_blank" class="text-blue-400 hover:text-blue-300 transition-colors px-2" title="View Source"><i class="fas fa-eye"></i></a>
+                    <button class="text-red-500 hover:text-red-400 transition-colors px-2" onclick="deleteItem('cards', '${data.id}')" title="Delete"><i class="fas fa-trash-alt"></i></button>
+                </div>`;
+            container.appendChild(card);
+        }
+
+        function renderBrochures(dataToRender) {
+            const container = document.querySelector('#page-dashboard-brochures .brochure-list-container');
+            const placeholder = document.querySelector('#page-dashboard-brochures .placeholder-row');
+            
+            container.innerHTML = '';
+            if (!dataToRender || dataToRender.length === 0) {
+                placeholder.classList.remove('hidden');
+            } else {
+                placeholder.classList.add('hidden');
+                dataToRender.forEach((data, index) => addBrochureToList(data, index));
+            }
+        }
+
+        function addBrochureToList(data, index) {
+            const container = document.querySelector('#page-dashboard-brochures .brochure-list-container');
+            const row = document.createElement('div');
+            row.id = `brochure-${data.id}`;
+            row.className = 'brochure-row glass-card p-4 rounded-xl flex items-center justify-between';
+            row.style.animationDelay = `${index * 50}ms`;
+            row.innerHTML = `
+                <div class="flex-1 truncate font-bold">${data.company_name}</div>
+                <div class="flex items-center gap-4">
+                    <button onclick="showContactsModal('${data.id}')" class="text-sm text-blue-400 hover:text-blue-300">View Contacts (${data.contacts.length})</button>
+                    <button onclick="showInfoModal('${data.id}')" class="text-sm text-purple-400 hover:text-purple-300">View Info</button>
+                    <div class="flex items-center gap-2">
+                        <a href="/uploads/${data.image_filename}" target="_blank" class="text-gray-400 hover:text-white transition-colors px-2" title="View PDF"><i class="fas fa-eye"></i></a>
+                        <button class="text-red-500 hover:text-red-400 transition-colors px-2" onclick="deleteItem('brochures', '${data.id}')" title="Delete Brochure"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+        }
+        
+        async function loadInitialData(mode) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/load_data/${mode}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey: userApiKey })
+                });
+                const data = await response.json();
+                contactData[mode] = Array.isArray(data) ? data : [];
+                renderUI(mode);
+            } catch (error) { 
+                console.error(`Failed to load data for ${mode}:`, error);
+                contactData[mode] = [];
+                renderUI(mode);
+            }
+        }
+
+        function showPage(pageId) {
+            pages.forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            headerSubtitle.textContent = pageId.includes('dashboard') ? "AI Command Center" : "AI-Powered Document Extraction";
+            backBtn.classList.toggle('hidden', pageId === 'page-api-key' || pageId === 'page-select-mode');
+            chatWidget.classList.toggle('hidden', !pageId.includes('dashboard'));
+        }
+
+        document.getElementById('continue-with-api-key-btn').addEventListener('click', async () => {
+            const keyInput = document.getElementById('api-key-input');
+            const errorEl = document.getElementById('api-key-error');
+            const key = keyInput.value.trim();
+            
+            if (key.length !== 39) {
+                errorEl.textContent = 'Please enter a valid 16-digit API key.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            
+            errorEl.classList.add('hidden');
+            userApiKey = key;
+            showPage('page-select-mode');
+        });
+        
+        document.getElementById('select-cards-btn').addEventListener('click', () => {
+            currentMode = 'cards';
+            chatHistory = [];
+            showPage('page-dashboard-cards');
+            loadInitialData('cards');
+        });
+        
+        document.getElementById('select-brochures-btn').addEventListener('click', () => {
+            currentMode = 'brochures';
+            chatHistory = [];
+            showPage('page-dashboard-brochures');
+             loadInitialData('brochures');
+        });
+        
+        backBtn.addEventListener('click', () => showPage('page-select-mode'));
+
+        ['cards', 'brochures'].forEach(mode => {
+            const dashboard = document.getElementById(`page-dashboard-${mode}`);
+            if (!dashboard) return;
+            
+            const dropZone = dashboard.querySelector('.drop-zone');
+            const fileUpload = dashboard.querySelector('input[type="file"]');
+            const searchInput = dashboard.querySelector('.search-input');
+
+            dropZone.addEventListener('dragover', e => e.preventDefault());
+            dropZone.addEventListener('drop', e => { e.preventDefault(); handleFiles(mode, e.dataTransfer.files); });
+            fileUpload.addEventListener('change', e => handleFiles(mode, e.target.files));
+            
+            if (mode === 'cards') {
+                const actionsMenuBtn = dashboard.querySelector('.actions-menu-btn');
+                const actionsDropdown = dashboard.querySelector('.actions-dropdown');
+                const cardGridContainer = dashboard.querySelector('.card-grid-container');
+
+                searchInput.addEventListener('input', () => {
+                    const searchTerm = searchInput.value.toLowerCase();
+                    const filteredData = contactData.cards.filter(contact => Object.values(contact).some(value => String(value).toLowerCase().includes(searchTerm)));
+                    renderCards(filteredData);
+                });
+
+                actionsMenuBtn.addEventListener('click', () => actionsDropdown.classList.toggle('hidden'));
+                
+                actionsDropdown.querySelector('.export-pdf-btn').addEventListener('click', e => { e.preventDefault(); exportData('cards', 'pdf'); });
+                actionsDropdown.querySelector('.export-excel-btn').addEventListener('click', e => { e.preventDefault(); exportData('cards', 'excel'); });
+
+                cardGridContainer.addEventListener('click', (e) => {
+                    const fieldElement = e.target.closest('.editable-field');
+                    if (!fieldElement || fieldElement.querySelector('input')) return;
+                    
+                    const originalValue = fieldElement.textContent.replace(/^[\s\S]*?\s/, '').trim();
+                    const fieldName = fieldElement.dataset.field;
+                    fieldElement.innerHTML = `<input type="text" value="${originalValue}" class="w-full bg-gray-800 border border-purple-500 rounded px-2 py-1 text-sm">`;
+                    const input = fieldElement.querySelector('input');
+                    input.focus();
+                    input.select();
+
+                    const save = async () => {
+                        const newValue = input.value.trim() || 'N/A';
+                        const cardId = fieldElement.closest('.contact-card').id.replace('card-', '');
+                        
+                        const dataIndex = contactData.cards.findIndex(d => d.id === cardId);
+                        if (dataIndex > -1) contactData.cards[dataIndex][fieldName] = newValue;
+                        
+                        fieldElement.innerHTML = fieldElement.innerHTML.includes('fa-fw') ? `<i class="fas ${getIconForField(fieldName)} fa-fw mr-2"></i>${newValue}` : newValue;
+                        
+                        await saveEditToServer('cards', cardId, fieldName, newValue);
+                    };
+                    input.addEventListener('blur', save);
+                    input.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') input.blur();
+                        if (e.key === 'Escape') fieldElement.innerHTML = fieldElement.innerHTML.includes('fa-fw') ? `<i class="fas ${getIconForField(fieldName)} fa-fw mr-2"></i>${originalValue}` : originalValue;
+                    });
+                });
+            } else if (mode === 'brochures') {
+                searchInput.addEventListener('input', () => {
+                    const searchTerm = searchInput.value.toLowerCase();
+                    const filteredData = contactData.brochures.filter(brochure => {
+                        // Search company name
+                        if (brochure.company_name.toLowerCase().includes(searchTerm)) return true;
+                        // Search raw text
+                        if (brochure.raw_text.toLowerCase().includes(searchTerm)) return true;
+                        // Deep search inside contacts
+                        return brochure.contacts.some(contact => 
+                            Object.values(contact).some(value => String(value).toLowerCase().includes(searchTerm))
+                        );
+                    });
+                    renderBrochures(filteredData);
+                });
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('.actions-menu-container').forEach(container => {
+                if (!container.contains(e.target)) {
+                    container.querySelector('.actions-dropdown').classList.add('hidden');
+                }
+            });
+        });
+
+        function handleFiles(mode, files) {
+            if (files.length === 0) return;
+            if (!userApiKey) { alert("Please enter an API key."); showPage('page-api-key'); return; }
+            Array.from(files).forEach(file => processFile(mode, file));
+        }
+
+        async function processFile(mode, file) {
+            const fileId = `file-${Date.now()}-${Math.random()}`;
+            addFileToQueueUI(mode, fileId, file.name);
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('apiKey', userApiKey);
+            
+            const endpoint = mode === 'cards' ? '/process_card' : '/process_brochure';
+            try {
+                const response = await fetch(API_BASE_URL + endpoint, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error((await response.json()).error || 'Server error');
+                const newData = await response.json();
+                
+                if (mode === 'brochures') {
+                    contactData.brochures.unshift(newData);
+                } else {
+                    contactData.cards.unshift(newData);
+                }
+
+                renderUI(mode);
+                updateQueueUI(mode, fileId, 'success', 'Processing complete.');
+            } catch (error) { console.error('Error processing file:', error); updateQueueUI(mode, fileId, 'error', error.message); }
+        }
+        
+        async function deleteItem(mode, itemId, contactId = null) {
+            const confirmMessage = contactId ? 'Are you sure you want to delete this contact?' : `Are you sure you want to delete this entire ${mode.slice(0, -1)}?`;
+            if (!confirm(confirmMessage)) return;
+            try {
+                const response = await fetch(`${API_BASE_URL}/delete_card/${mode}/${itemId}`, { 
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey: userApiKey, contactId: contactId })
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+                
+                await loadInitialData(mode);
+                if (contactId) {
+                    showContactsModal(itemId);
+                }
+
+                addFileToQueueUI(mode, `delete-${itemId}`, `Item deleted.`, 'success');
+            } catch (error) { alert(`Failed to delete: ${error.message}`); }
+        }
+        
+        function getIconForField(fieldName) {
+            const icons = { "Email": "fa-envelope", "Number": "fa-phone", "Address": "fa-map-marker-alt" };
+            return icons[fieldName] || "";
+        }
+
+        async function saveEditToServer(mode, itemId, field, value, contactId = null) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/update_card/${mode}/${itemId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field, value, apiKey: userApiKey, contactId })
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+                addFileToQueueUI(mode, Date.now(), `Saved changes to ${field}.`, 'success');
+            } catch (error) {
+                alert(`Failed to save changes: ${error.message}`);
+                loadInitialData(mode);
+            }
+        }
+
+        function addFileToQueueUI(mode, id, name, status = 'processing') {
+            const feed = document.querySelector(`#page-dashboard-${mode} .live-activity-feed`);
+            const el = document.createElement('div');
+            el.id = id;
+            el.className = 'glass-card p-2 rounded-lg flex items-center justify-between text-sm opacity-0 transform -translate-y-2 transition-all duration-300';
+            el.innerHTML = `<span class="truncate"></span><div class="status-icon ml-2"></div>`;
+            feed.prepend(el);
+            setTimeout(() => { el.classList.remove('opacity-0', '-translate-y-2'); }, 10);
+            updateQueueUI(mode, id, status, name);
+        }
+
+        function updateQueueUI(mode, id, status, message = '') {
+            const el = document.getElementById(id);
+            if (!el) return;
+            let iconHtml = '', textHtml = '';
+            switch (status) {
+                case 'processing': iconHtml = '<i class="fas fa-spinner animate-spin"></i>'; textHtml = `Processing ${message}...`; break;
+                case 'success': iconHtml = '<i class="fas fa-check-circle text-green-500"></i>'; textHtml = message; setTimeout(() => el.classList.add('opacity-0'), 3000); setTimeout(() => el.remove(), 3500); break;
+                case 'error': iconHtml = `<i class="fas fa-exclamation-circle text-red-500" title="${message}"></i>`; textHtml = `Error: ${message}`; el.querySelector('span').classList.add('line-through'); break;
+            }
+            el.querySelector('span').innerHTML = textHtml;
+            el.querySelector('.status-icon').innerHTML = iconHtml;
+        }
+        
+        function exportData(mode, format, brochureId = null) {
+            let dataToExport;
+            let companyName = mode;
+
+            if (brochureId) {
+                const brochure = contactData.brochures.find(b => b.id === brochureId);
+                dataToExport = brochure.contacts;
+                companyName = brochure.company_name;
+            } else {
+                dataToExport = contactData[mode];
+            }
+
+            if (!dataToExport || dataToExport.length === 0) return addFileToQueueUI(mode, Date.now(), `No data to export.`, 'error');
+            
+            const headers = ["Company Name", "Owner Name", "Email", "Number"];
+            
+            if (format === 'pdf') {
+                const { jsPDF } = window.jspdf; 
+                const doc = new jsPDF();
+                const tableRows = dataToExport.map(contact => [
+                    contact['Company Name'] || (mode === 'brochures' ? companyName : 'N/A'),
+                    contact["Owner Name"] || "N/A",
+                    contact["Email"] || "N/A",
+                    contact["Number"] || "N/A"
+                ]);
+                doc.text(`Extracted Contacts for ${companyName}`, 14, 15);
+                doc.autoTable({ head: [headers], body: tableRows, startY: 20 });
+                doc.save(`${companyName}_contacts.pdf`);
+                addFileToQueueUI(mode, Date.now(), `Exported to PDF.`, 'success');
+            } else if (format === 'excel') {
+                const csvRows = dataToExport.map(row => headers.map(fieldName => { 
+                    const value = (row[fieldName] || (fieldName === 'Company Name' && mode === 'brochures' ? companyName : 'N/A')).toString();
+                    return value.includes(',') ? `"${value}"` : value;
+                }).join(','));
+                const csvContent = [headers.join(','), ...csvRows].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `${companyName}_contacts.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                addFileToQueueUI(mode, Date.now(), `Exported to Excel (CSV).`, 'success');
+            }
+        }
+
+        async function handleChatSubmit() {
+            const query = chatInput.value.trim();
+            if (!query) return;
+
+            addChatMessage(query, 'user');
+            chatHistory.push({ role: 'user', parts: [{ text: query }] });
+
+            chatInput.value = '';
+            chatSendBtn.disabled = true;
+            addChatMessage('...', 'ai_typing');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query: query, 
+                        apiKey: userApiKey, 
+                        mode: currentMode,
+                        history: chatHistory.slice(-6)
+                    })
+                });
+                document.querySelector('.ai_typing')?.parentElement.parentElement.remove();
+                if (!response.ok) throw new Error((await response.json()).error || 'Server error');
+                const data = await response.json();
+                
+                addChatMessage(data.answer, 'ai');
+                chatHistory.push({ role: 'model', parts: [{ text: data.answer }] });
+
+            } catch (error) {
+                document.querySelector('.ai_typing')?.parentElement.parentElement.remove();
+                addChatMessage(`Error: ${error.message}`, 'ai');
+            } finally {
+                chatSendBtn.disabled = false;
+            }
+        }
+
+        function addChatMessage(message, type) {
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble rounded-lg p-3 ${type === 'user' ? 'bg-purple-600 self-end' : 'bg-gray-700 self-start'}`;
+            if (type === 'ai_typing') {
+                bubble.innerHTML = `<p class="text-sm italic ai_typing">AI is thinking...</p>`;
+            } else {
+                bubble.innerHTML = `<p class="text-sm">${message}</p>`;
+            }
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex w-full ${type === 'user' ? 'justify-end' : 'justify-start'}`;
+            messageWrapper.appendChild(bubble);
+            chatMessages.appendChild(messageWrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // MODAL LOGIC
+        function toggleModal(modalId, show) {
+            const modal = document.getElementById(modalId);
+            if (show) {
+                modal.classList.remove('hidden');
+                setTimeout(() => { 
+                    modal.style.opacity = '1';
+                    modal.querySelector('.modal-content').style.opacity = '1';
+                    modal.querySelector('.modal-content').style.transform = 'scale(1)';
+                }, 10);
+            } else {
+                modal.style.opacity = '0';
+                modal.querySelector('.modal-content').style.opacity = '0';
+                modal.querySelector('.modal-content').style.transform = 'scale(0.95)';
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+
+        function showContactsModal(brochureId) {
+            const brochure = contactData.brochures.find(b => b.id === brochureId);
+            if (!brochure) return;
+
+            const modalTitle = document.getElementById('contacts-modal-title');
+            const modalBody = document.getElementById('contacts-modal-body');
+            modalTitle.textContent = `Contacts for ${brochure.company_name}`;
+            modalBody.innerHTML = '';
+
+            document.getElementById('export-contacts-pdf-btn').onclick = () => exportData('brochures', 'pdf', brochureId);
+            document.getElementById('export-contacts-excel-btn').onclick = () => exportData('brochures', 'excel', brochureId);
+
+            if (brochure.contacts.length === 0) {
+                modalBody.innerHTML = '<p class="text-gray-400">No individual contacts were found in this brochure.</p>';
+            } else {
+                brochure.contacts.forEach(contact => {
+                    const contactEl = document.createElement('div');
+                    contactEl.className = 'glass-card p-3 rounded-lg flex items-center justify-between';
+                    contactEl.innerHTML = `
+                        <div class="flex-1 grid grid-cols-3 gap-4 text-sm">
+                            <div class="editable-field" data-brochure-id="${brochure.id}" data-contact-id="${contact.id}" data-field="Owner Name">${contact['Owner Name'] || 'N/A'}</div>
+                            <div class="editable-field" data-brochure-id="${brochure.id}" data-contact-id="${contact.id}" data-field="Email">${contact['Email'] || 'N/A'}</div>
+                            <div class="editable-field" data-brochure-id="${brochure.id}" data-contact-id="${contact.id}" data-field="Number">${contact['Number'] || 'N/A'}</div>
+                        </div>
+                        <button class="text-red-500 hover:text-red-400 ml-4" onclick="deleteItem('brochures', '${brochure.id}', '${contact.id}')"><i class="fas fa-trash-alt"></i></button>
+                    `;
+                    modalBody.appendChild(contactEl);
+                });
+            }
+            toggleModal('contacts-modal', true);
+        }
+
+        function showInfoModal(brochureId) {
+            const brochure = contactData.brochures.find(b => b.id === brochureId);
+            if (!brochure) return;
+            document.getElementById('info-modal-title').textContent = `Information for ${brochure.company_name}`;
+            document.getElementById('info-modal-body').textContent = brochure.raw_text || "No additional information was extracted.";
+            
+            document.getElementById('export-info-pdf-btn').onclick = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.text(`Information for ${brochure.company_name}`, 14, 15);
+                doc.text(brochure.raw_text, 14, 25, { maxWidth: 180 });
+                doc.save(`${brochure.company_name}_info.pdf`);
+                addFileToQueueUI('brochures', Date.now(), 'Exported info to PDF.', 'success');
+            };
+
+            toggleModal('info-modal', true);
+        }
+
+        document.getElementById('contacts-modal-body').addEventListener('click', (e) => {
+            const fieldElement = e.target.closest('.editable-field');
+            if (!fieldElement || fieldElement.querySelector('input')) return;
+            
+            const originalValue = fieldElement.textContent;
+            const brochureId = fieldElement.dataset.brochureId;
+            const contactId = fieldElement.dataset.contactId;
+            const fieldName = fieldElement.dataset.field;
+
+            fieldElement.innerHTML = `<input type="text" value="${originalValue}" class="w-full bg-gray-800 border border-purple-500 rounded px-2 py-1 text-sm">`;
+            const input = fieldElement.querySelector('input');
+            input.focus();
+            input.select();
+
+            const save = async () => {
+                const newValue = input.value.trim() || 'N/A';
+                fieldElement.textContent = newValue;
+                
+                const brochure = contactData.brochures.find(b => b.id === brochureId);
+                const contact = brochure.contacts.find(c => c.id === contactId);
+                contact[fieldName] = newValue;
+
+                await saveEditToServer('brochures', brochureId, fieldName, newValue, contactId);
+            };
+            input.addEventListener('blur', save);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') input.blur();
+                if (e.key === 'Escape') fieldElement.textContent = originalValue;
+            });
+        });
+
+
+        chatSendBtn.addEventListener('click', handleChatSubmit);
+        chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleChatSubmit(); } });
+        
+        initCanvas();
+        animate();
+        showPage('page-api-key');
+    </script>
+</body>
+</html>
