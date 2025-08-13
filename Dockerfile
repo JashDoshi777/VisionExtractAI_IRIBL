@@ -1,20 +1,33 @@
-# Use an official Python runtime as a parent image
+# Use Python image
 FROM python:3.10-slim
 
-# Set the working directory in the container
-WORKDIR /code
+# Prevents Python from buffering stdout and stderr
+ENV PYTHONUNBUFFERED=1
 
-# Copy the requirements file into the container at /code
-COPY ./requirements.txt /code/requirements.txt
+# Set working directory
+WORKDIR /app
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the rest of the application files into the container at /code
-COPY . /code/
+# Copy requirements first (for caching)
+COPY requirements.txt .
 
-# Expose the port the app runs on
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the app
+COPY . .
+
+# Expose Flask's default port
 EXPOSE 5000
 
-# Run app.py when the container launches
+# Set Flask environment variables
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_RUN_PORT=5000
+
+# Run with Gunicorn in production
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
