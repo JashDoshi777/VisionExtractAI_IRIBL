@@ -7,8 +7,8 @@ import time
 
 # --- Supabase Configuration ---
 # IMPORTANT: Replace these with your actual Supabase URL and Public Anon Key
-SUPABASE_URL = "https://nwcyfrvkfozlzwjimhmb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53Y3lmcnZrZm96bHp3amltaG1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwODE0NDAsImV4cCI6MjA3MDY1NzQ0MH0.51FFi8Tk51weqnUTC5fvKLldBWcNP_eYAzJzo6sDt88"
+SUPABASE_URL = "https://kpiiqhpuwlncztkczjzx.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwaWlxaHB1d2xuY3p0a2N6anp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyOTI5NTIsImV4cCI6MjA3MDg2ODk1Mn0.M4zfqNMr1Zwgil1i7Y06tvW6FjDkAetnV8eU6eIdNm4"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Helper Functions ---
@@ -155,3 +155,4 @@ def query_knowledge_base(user_api_key, query_text, mode, history=[]):
     except Exception as e:
         print(f"❌ RAG Core: Error during Gemini API call or Supabase query: {e}")
         return f"An error occurred while trying to generate an answer: {e}"
+
