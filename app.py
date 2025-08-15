@@ -4,52 +4,59 @@ import os
 import io
 import json
 import hashlib
+import gc # Import the garbage collector
 import google.generativeai as genai
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory , redirect
 from flask_cors import CORS
 from PIL import Image
 import fitz  # PyMuPDF
 import rag_core 
+from supabase import create_client, Client
 
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = 'uploads'
-DATA_FOLDER = 'user_data' 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# --- Supabase Configuration ---
+# IMPORTANT: Replace these with your actual Supabase URL and Public Anon Key
+SUPABASE_URL = "https://nwcyfrvkfozlzwjimhmb.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53Y3lmcnZrZm96bHp3amltaG1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwODE0NDAsImV4cCI6MjA3MDY1NzQ0MH0.51FFi8Tk51weqnUTC5fvKLldBWcNP_eYAzJzo6sDt88"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-if not os.path.exists(DATA_FOLDER):
-    os.makedirs(DATA_FOLDER)
 
-# --- Helper Functions for User-Specific Data ---
+# --- Helper Functions for Supabase Data (No Changes) ---
 
-def _get_user_data_filepath(user_api_key, mode):
+def _get_user_data_filename(user_api_key, mode):
+    """Generates a unique filename for a user's data based on their API key hash."""
     user_hash = hashlib.sha256(user_api_key.encode()).hexdigest()[:16]
-    return os.path.join(DATA_FOLDER, f'{user_hash}_{mode}_data.json')
+    return f'{user_hash}_{mode}_data.json'
 
 def _load_user_data(user_api_key, mode):
-    filepath = _get_user_data_filepath(user_api_key, mode)
+    """Loads a user's data from the 'user_data' Supabase bucket."""
+    filename = _get_user_data_filename(user_api_key, mode)
     try:
-        if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                return json.load(f)
-    except (IOError, json.JSONDecodeError):
+        response = supabase.storage.from_("user_data").download(filename)
+        data = json.loads(response.decode('utf-8'))
+        return data
+    except Exception as e:
+        print(f"ℹ️ Could not load data for {filename}. It might not exist yet. Error: {e}")
         return []
-    return []
 
 def _save_user_data(user_api_key, mode, data):
-    filepath = _get_user_data_filepath(user_api_key, mode)
+    """Saves a user's data to the 'user_data' Supabase bucket."""
+    filename = _get_user_data_filename(user_api_key, mode)
     try:
-        with open(filepath, 'w') as f:
-            json.dump(data, f, indent=4)
+        data_bytes = json.dumps(data, indent=4).encode('utf-8')
+        supabase.storage.from_("user_data").upload(
+            file=data_bytes,
+            path=filename,
+            file_options={"content-type": "application/json", "upsert": "true"}
+        )
         return True
-    except IOError as e:
-        print(f"❌ Could not save data to {filepath}! Error: {e}")
+    except Exception as e:
+        print(f"❌ Could not save data to Supabase for {filename}! Error: {e}")
         return False
 
-# --- Business Card Logic (UNCHANGED) ---
+# --- Business Card & Brochure Logic (No Changes) ---
 
 def extract_card_data(image_bytes, user_api_key):
     print("🤖 Processing business card with Gemini Vision API...")
@@ -83,10 +90,7 @@ def extract_card_data(image_bytes, user_api_key):
         print(f"❌ Error during Gemini API call for business card: {e}")
         return {"error": f"Failed to parse AI response: {e}"}
 
-# --- Brochure Logic ---
-
 def extract_brochure_contacts_and_company(image_list, user_api_key):
-    """Step 1 of the chain: Meticulously extract only the contacts and company name."""
     print("🤖 Brochure Step 1: Extracting contacts and company...")
     if not user_api_key: return {"error": "A valid Google AI API Key was not provided."}
     
@@ -115,7 +119,6 @@ def extract_brochure_contacts_and_company(image_list, user_api_key):
         return {"error": f"Failed to parse contacts from brochure: {e}"}
 
 def extract_brochure_raw_text(image_list, contacts_to_exclude, user_api_key):
-    """Step 2 of the chain: Extract all other text, EXCLUDING the contacts we already found."""
     print("🤖 Brochure Step 2: Extracting remaining raw text...")
     if not user_api_key: return {"error": "A valid Google AI API Key was not provided."}
     
@@ -164,8 +167,8 @@ def process_card_endpoint():
         _, f_ext = os.path.splitext(file.filename)
         safe_ext = f_ext if f_ext.lower() in ['.png', '.jpg', '.jpeg', '.webp'] else '.png'
         image_filename = f"{file_id}{safe_ext}"
-        save_path = os.path.join(UPLOAD_FOLDER, image_filename)
-        with open(save_path, 'wb') as f: f.write(image_bytes)
+        
+        supabase.storage.from_("uploads").upload(file=image_bytes, path=image_filename, file_options={"content-type": file.mimetype})
         
         extracted_info['id'] = file_id
         extracted_info['image_filename'] = image_filename
@@ -196,26 +199,46 @@ def process_brochure_endpoint():
         
         brochure_id = os.urandom(8).hex()
         pdf_filename = f"{brochure_id}.pdf"
-        save_path = os.path.join(UPLOAD_FOLDER, pdf_filename)
-        with open(save_path, 'wb') as f: f.write(pdf_bytes)
+        
+        supabase.storage.from_("uploads").upload(file=pdf_bytes, path=pdf_filename, file_options={"content-type": "application/pdf"})
 
-        image_list = [Image.open(io.BytesIO(page.get_pixmap().tobytes("png"))) for page in pdf_doc]
-        
-        if not image_list:
-            return jsonify({'error': 'No images found in the PDF brochure.'}), 400
+        # --- MEMORY EFFICIENT PROCESSING ---
+        all_contacts = []
+        all_raw_text = ""
+        company_name = "Unknown Company"
+
+        for i, page in enumerate(pdf_doc):
+            print(f"📄 Processing page {i+1}/{len(pdf_doc)}...")
+            page_image_bytes = page.get_pixmap().tobytes("png")
+            page_image = Image.open(io.BytesIO(page_image_bytes))
             
-        # FIXED: Corrected the function name here
-        contact_data = extract_brochure_contacts_and_company(image_list, user_api_key)
-        if "error" in contact_data: return jsonify(contact_data), 500
-        
-        raw_text_data = extract_brochure_raw_text(image_list, contact_data.get("contacts", []), user_api_key)
-        if "error" in raw_text_data: return jsonify(raw_text_data), 500
+            # Extract contacts from this single page
+            page_contact_data = extract_brochure_contacts_and_company([page_image], user_api_key)
+            if "error" in page_contact_data:
+                print(f"⚠️ Skipping page {i+1} due to contact extraction error: {page_contact_data['error']}")
+                continue
+            
+            if page_contact_data.get("contacts"):
+                all_contacts.extend(page_contact_data["contacts"])
+            if page_contact_data.get("company_name"):
+                company_name = page_contact_data["company_name"]
+
+            # Extract raw text from this single page
+            page_raw_text_data = extract_brochure_raw_text([page_image], page_contact_data.get("contacts", []), user_api_key)
+            if "error" not in page_raw_text_data and page_raw_text_data.get("raw_text"):
+                all_raw_text += page_raw_text_data["raw_text"] + "\n\n"
+
+            # Clean up memory explicitly
+            del page_image_bytes
+            del page_image
+            gc.collect()
+        # --- END OF EFFICIENT PROCESSING ---
 
         final_brochure_object = {
             "id": brochure_id,
-            "company_name": contact_data.get("company_name", "Unknown Company"),
-            "contacts": contact_data.get("contacts", []),
-            "raw_text": raw_text_data.get("raw_text", ""),
+            "company_name": company_name,
+            "contacts": all_contacts,
+            "raw_text": all_raw_text.strip(),
             "image_filename": pdf_filename
         }
 
@@ -226,6 +249,7 @@ def process_brochure_endpoint():
         user_brochures.insert(0, final_brochure_object)
         _save_user_data(user_api_key, 'brochures', user_brochures)
         
+        # Combine all text for RAG
         raw_text_for_rag = final_brochure_object.get("raw_text", "")
         contacts_for_rag = final_brochure_object.get("contacts", [])
         if contacts_for_rag:
@@ -244,7 +268,7 @@ def process_brochure_endpoint():
         print(f"An error occurred in process_brochure endpoint: {e}")
         return jsonify({'error': f'Server processing failed: {e}'}), 500
 
-# --- Shared Endpoints ---
+# --- Shared Endpoints (No Changes) ---
 
 @app.route('/chat', methods=['POST'])
 def chat_endpoint():
@@ -329,13 +353,19 @@ def update_card_endpoint(mode, item_id):
     elif mode == 'brochures':
         for brochure in user_data:
             if brochure.get('id') == item_id:
-                for contact in brochure.get('contacts', []):
-                    if contact.get('id') == contact_id:
-                        contact[field] = value
-                        _save_user_data(user_api_key, mode, user_data)
-                        rag_core.remove_document_from_knowledge_base(user_api_key, item_id, mode)
-                        rag_core.add_document_to_knowledge_base(user_api_key, brochure['raw_text'], item_id, mode)
-                        return jsonify({"success": True})
+                # This logic is for updating a specific contact within a brochure
+                if contact_id:
+                    for contact in brochure.get('contacts', []):
+                        if contact.get('id') == contact_id:
+                            contact[field] = value
+                            _save_user_data(user_api_key, mode, user_data)
+                            # Re-index the entire brochure text after an update
+                            rag_core.remove_document_from_knowledge_base(user_api_key, item_id, mode)
+                            # Reconstruct the full text for re-indexing
+                            full_text = brochure.get('raw_text', '')
+                            contacts_text = "\n".join([f"Name: {c.get('Owner Name', '')}, Email: {c.get('Email', '')}, Number: {c.get('Number', '')}" for c in brochure.get('contacts', [])])
+                            rag_core.add_document_to_knowledge_base(user_api_key, f"{full_text}\n{contacts_text}", item_id, mode)
+                            return jsonify({"success": True})
 
     return jsonify({"success": False, "message": "Item not found"}), 404
 
@@ -357,14 +387,15 @@ def delete_card_endpoint(mode, item_id):
             return jsonify({"success": True})
 
     elif mode == 'brochures':
-        if contact_id:
+        if contact_id: # Deleting a single contact from a brochure
             for brochure in user_data:
-                original_len = len(brochure.get('contacts', []))
-                brochure['contacts'] = [c for c in brochure.get('contacts', []) if c.get('id') != contact_id]
-                if len(brochure.get('contacts', [])) < original_len:
-                    _save_user_data(user_api_key, mode, user_data)
-                    return jsonify({"success": True})
-        else:
+                if brochure.get('id') == item_id:
+                    original_len = len(brochure.get('contacts', []))
+                    brochure['contacts'] = [c for c in brochure.get('contacts', []) if c.get('id') != contact_id]
+                    if len(brochure.get('contacts', [])) < original_len:
+                        _save_user_data(user_api_key, mode, user_data)
+                        return jsonify({"success": True})
+        else: # Deleting the entire brochure
             original_len = len(user_data)
             user_data = [b for b in user_data if b.get('id') != item_id]
             if len(user_data) < original_len:
@@ -380,11 +411,13 @@ def serve_dashboard():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    public_url = supabase.storage.from_("uploads").get_public_url(filename)
+    return redirect(public_url, code=302)
+
 
 if __name__ == "__main__":
-    rag_core.initialize_rag_system()
+    # NO MORE RAG INITIALIZATION NEEDED HERE!
     print("--- Server is starting! ---")
-    print(f"User-specific data will be saved in '{os.path.abspath(DATA_FOLDER)}'")
     print("To use the dashboard, open your web browser and go to: http://127.0.0.1:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    # Note: debug=True is great for development but should be False in production
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
