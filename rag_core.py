@@ -1,5 +1,5 @@
 # rag_core.py
-
+import os
 import hashlib
 import google.generativeai as genai
 from supabase import create_client, Client
@@ -155,5 +155,6 @@ def query_knowledge_base(user_api_key, query_text, mode, history=[]):
     except Exception as e:
         print(f"❌ RAG Core: Error during Gemini API call or Supabase query: {e}")
         return f"An error occurred while trying to generate an answer: {e}"
+
 
 
