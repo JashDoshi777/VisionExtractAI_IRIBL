@@ -17,11 +17,27 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Supabase Configuration ---
-# IMPORTANT: Replace these with your actual Supabase URL and Public Anon Key
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY") # This will use your secret SERVICE_ROLE key from Render
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+print("--- 🚀 SERVER PROCESS STARTED ---")
 
+# --- Supabase Configuration ---
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# --- 🔍 DEBUGGING PRINTS ---
+print(f"Found SUPABASE_URL: {SUPABASE_URL}")
+if SUPABASE_KEY:
+    # Print a masked version of the key to confirm it's loaded without exposing the secret
+    print(f"Found SUPABASE_KEY: Ending in '...{SUPABASE_KEY[-4:]}'")
+else:
+    print("🔴 CRITICAL ERROR: SUPABASE_KEY environment variable not found!")
+# --- END DEBUGGING ---
+
+# This line might be where the crash happens if the keys are wrong
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("✅ Supabase client initialized successfully.")
+except Exception as e:
+    print(f"🔴 CRITICAL ERROR: Failed to initialize Supabase client. Error: {e}")
 # --- Helper Functions for Supabase Data (No Changes) ---
 
 def _get_user_data_filename(user_api_key, mode):
@@ -420,5 +436,6 @@ if __name__ == "__main__":
     print("To use the dashboard, open your web browser and go to: http://127.0.0.1:5000")
     # Note: debug=True is great for development but should be False in production
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
 
 
