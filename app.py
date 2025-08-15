@@ -18,8 +18,8 @@ CORS(app)
 
 # --- Supabase Configuration ---
 # IMPORTANT: Replace these with your actual Supabase URL and Public Anon Key
-SUPABASE_URL = "https://nwcyfrvkfozlzwjimhmb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53Y3lmcnZrZm96bHp3amltaG1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwODE0NDAsImV4cCI6MjA3MDY1NzQ0MH0.51FFi8Tk51weqnUTC5fvKLldBWcNP_eYAzJzo6sDt88"
+SUPABASE_URL = "https://kpiiqhpuwlncztkczjzx.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwaWlxaHB1d2xuY3p0a2N6anp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyOTI5NTIsImV4cCI6MjA3MDg2ODk1Mn0.M4zfqNMr1Zwgil1i7Y06tvW6FjDkAetnV8eU6eIdNm4"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
@@ -421,3 +421,4 @@ if __name__ == "__main__":
     print("To use the dashboard, open your web browser and go to: http://127.0.0.1:5000")
     # Note: debug=True is great for development but should be False in production
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
