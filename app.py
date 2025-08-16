@@ -16,6 +16,15 @@ from supabase import create_client, Client
 app = Flask(__name__)
 CORS(app)
 
+@app.before_request
+def log_request_info():
+    """This function will run before every single request."""
+    print("--- 📥 New Request Received ---")
+    print(f"Request Method: {request.method}")
+    print(f"Request Path: {request.path}")
+    print(f"Content-Length Header: {request.headers.get('Content-Length')}")
+    print("-----------------------------")
+
 # --- Supabase Configuration ---
 print("--- 🚀 SERVER PROCESS STARTED ---")
 
@@ -436,6 +445,7 @@ if __name__ == "__main__":
     print("To use the dashboard, open your web browser and go to: http://127.0.0.1:5000")
     # Note: debug=True is great for development but should be False in production
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
 
 
 
